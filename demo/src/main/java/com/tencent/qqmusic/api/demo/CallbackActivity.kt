@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import com.tencent.qqmusic.api.common.IntentHelper
+import com.tencent.qqmusic.api.common.SchemeHelper
 
 
 class CallbackActivity : Activity() {
@@ -36,15 +38,17 @@ class CallbackActivity : Activity() {
                 Log.i(TAG, "ret:" + uri.getQueryParameter("ret"))
             } else if (cmd == "verify") {
                 val ret = uri.getQueryParameter("ret")
-                val intent = Intent()
-                intent.action = "callback_verify_notify"
-                intent.putExtra("ret", ret)
-                sendBroadcast(intent)
+                IntentHelper.broadcastVerify(this, ret)
             } else {
-                val loginResult = uri.getQueryParameter("qmlogin")
-                if (loginResult == "1") {
+//                val loginResult = uri.getQueryParameter("qmlogin")
+//                if (loginResult == "1") {
+//                    Toast.makeText(this, "QQMusic login success!!!", Toast.LENGTH_LONG).show()
+//                } else if (loginResult == "0") {
+//                    Toast.makeText(this, "QQMusic login error!!!", Toast.LENGTH_LONG).show()
+//                }
+                if (SchemeHelper.isLoginSuccessfully(uri)) {
                     Toast.makeText(this, "QQMusic login success!!!", Toast.LENGTH_LONG).show()
-                } else if (loginResult == "0") {
+                } else {
                     Toast.makeText(this, "QQMusic login error!!!", Toast.LENGTH_LONG).show()
                 }
             }

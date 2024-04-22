@@ -6,18 +6,33 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.media.AudioFormat
-import android.os.*
-import android.support.v4.app.NotificationCompat
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.widget.Toast
-import com.tencent.qqmusic.api.demo.*
+import androidx.core.app.NotificationCompat
+import com.tencent.qqmusic.api.common.IntentHelper
+import com.tencent.qqmusic.api.demo.ApiSample
+import com.tencent.qqmusic.api.demo.Config
+import com.tencent.qqmusic.api.demo.IPlayService
+import com.tencent.qqmusic.api.demo.IPrint
 import com.tencent.qqmusic.api.demo.R
-import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
+import com.tencent.qqmusic.api.demo.toPrintableString
 import com.tencent.qqmusic.api.demo.util.QPlayBindHelper
-import com.tencent.qqmusic.third.api.contract.*
-import kotlinx.android.synthetic.main.activity_visual.view.*
+import com.tencent.qqmusic.api.demo.util.QQMusicApiWrapper
+import com.tencent.qqmusic.third.api.contract.Data
+import com.tencent.qqmusic.third.api.contract.ErrorCodes
+import com.tencent.qqmusic.third.api.contract.Events
+import com.tencent.qqmusic.third.api.contract.IQQMusicApi
+import com.tencent.qqmusic.third.api.contract.IQQMusicApiCallback
+import com.tencent.qqmusic.third.api.contract.IQQMusicApiEventListener
+import com.tencent.qqmusic.third.api.contract.Keys
+import com.tencent.qqmusic.third.api.contract.PlayState
 
 
 /**
@@ -32,8 +47,8 @@ class PlayerService : Service() {
         private const val CHANNEL_ID = "default"
     }
 
-    private val qPlayBindHelper = QPlayBindHelper(this)
     var qqMusicApi: IQQMusicApi? = null
+
     private var curPlayState: Int = 0
     private val handler = Handler(Looper.getMainLooper())
 
@@ -66,14 +81,7 @@ class PlayerService : Service() {
             val ret = p1?.extras?.get("ret")
             if (ret == "0") {
                 Log.d(TAG, "activeBroadcastReceiver 授权成功")
-                Toast.makeText(this@PlayerService, "授权成功", Toast.LENGTH_SHORT).show()
-                qqMusicApi?.registerEventListener(
-                    arrayListOf(
-                        Events.API_EVENT_PLAY_STATE_CHANGED,
-                        Events.API_EVENT_PLAY_SONG_CHANGED,
-                        Events.API_EVENT_MEDIA_INFO_CHANGED
-                    ), eventListener
-                )
+                onPermissionGranted()
             } else {
                 Log.d(TAG, "activeBroadcastReceiver 授权失败($ret)")
             }
@@ -82,9 +90,7 @@ class PlayerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val filter = IntentFilter()
-        filter.addAction("callback_verify_notify")
-        registerReceiver(activeBroadcastReceiver, filter)
+        IntentHelper.registerVerify(this, activeBroadcastReceiver)
 
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -150,18 +156,16 @@ class PlayerService : Service() {
     }
 
     private fun playNext() {
-        val result = qqMusicApi?.execute("skipToNext", null)
-        val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        val errorCode = ApiSample.skipToNext(qqMusicApi)
         if (errorCode != ErrorCodes.ERROR_OK) {
-            Log.d(VisualActivity.TAG, "下一首失败($errorCode)")
+            Log.d(TAG, "下一首失败($errorCode)")
         }
     }
 
     private fun resumeOrPause() {
         if (isPlaying()) {
             Log.d(TAG, "pauseMusic")
-            val result = qqMusicApi?.execute("pauseMusic", null)
-            val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+            val errorCode = ApiSample.pauseMusic(qqMusicApi)
             if (errorCode != ErrorCodes.ERROR_OK) {
                 Log.d(TAG, "暂停音乐失败($errorCode)")
             }
@@ -170,17 +174,15 @@ class PlayerService : Service() {
         } else {
             if (curPlayState == PlayState.PAUSED) {
                 Log.d(TAG, "resumeMusic")
-                val result = qqMusicApi?.execute("resumeMusic", null)
-                val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+                val errorCode = ApiSample.resumeMusic(qqMusicApi)
                 if (errorCode != ErrorCodes.ERROR_OK) {
-                    Log.d(VisualActivity.TAG, "继续播放音乐失败($errorCode)")
+                    Log.d(TAG, "继续播放音乐失败($errorCode)")
                 }
             } else {
                 Log.d(TAG, "playMusic")
-                val result = qqMusicApi?.execute("playMusic", null)
-                val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+                val errorCode = ApiSample.playMusic(qqMusicApi)
                 if (errorCode != ErrorCodes.ERROR_OK) {
-                    Log.d(VisualActivity.TAG, "开始播放音乐失败($errorCode)")
+                    Log.d(TAG, "开始播放音乐失败($errorCode)")
                 }
             }
             audioManager?.play()
@@ -289,40 +291,33 @@ class PlayerService : Service() {
     }
 
     private fun bindService() {
-        qPlayBindHelper.ensureQQMusicBindByStartProcess {
-            if (it && qPlayBindHelper.isBindQQMusic()) {
-                qqMusicApi = qPlayBindHelper.getQQMusicApi()!!
+        QPlayBindHelper.ensureQQMusicBindByStartProcess(this) {
+            if (it.isBindQQMusic()) {
+                qqMusicApi = it.getQQMusicApi()
 
-                //execute hi
-                val bundle = Bundle().apply {
-                    putInt(Keys.API_PARAM_KEY_SDK_VERSION, CommonCmd.SDK_VERSION)
-                    putString(Keys.API_PARAM_KEY_PLATFORM_TYPE, Config.BIND_PLATFORM)
-                }
-                val result = qqMusicApi?.execute("hi", bundle)
-                val code = result?.getInt(Keys.API_RETURN_KEY_CODE)
+                val code = ApiSample.hi(qqMusicApi, Config.BIND_PLATFORM)
                 if (code == ErrorCodes.ERROR_API_NO_PERMISSION) {
-                    val time = System.currentTimeMillis()
-                    val nonce = time.toString()
-                    val encryptString = OpenIDHelper.getEncryptString(nonce)
-                    CommonCmd.verifyCallerIdentity(
-                        this,
-                        Config.OPENID_APPID,
-                        packageName,
-                        encryptString,
-                        "qqmusicapidemo://"
-                    )
+                    requestPermission()
                 } else {
-                    Toast.makeText(this@PlayerService, "授权成功", Toast.LENGTH_SHORT).show()
-                    qqMusicApi?.registerEventListener(
-                        arrayListOf(
-                            Events.API_EVENT_PLAY_STATE_CHANGED,
-                            Events.API_EVENT_PLAY_SONG_CHANGED,
-                            Events.API_EVENT_MEDIA_INFO_CHANGED
-                        ), eventListener
-                    )
+                    onPermissionGranted()
                 }
             }
         }
+    }
+
+    private fun requestPermission() {
+        QQMusicApiWrapper.verifyCallerIdentity(this)
+    }
+
+    private fun onPermissionGranted() {
+        Toast.makeText(this, "授权成功", Toast.LENGTH_SHORT).show()
+        qqMusicApi?.registerEventListener(
+            arrayListOf(
+                Events.API_EVENT_PLAY_STATE_CHANGED,
+                Events.API_EVENT_PLAY_SONG_CHANGED,
+                Events.API_EVENT_MEDIA_INFO_CHANGED
+            ), eventListener
+        )
     }
 
     private fun isPlaying(): Boolean {

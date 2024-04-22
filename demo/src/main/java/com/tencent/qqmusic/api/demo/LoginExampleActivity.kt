@@ -2,16 +2,15 @@ package com.tencent.qqmusic.api.demo
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.Button
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import com.tencent.qqmusic.api.common.SchemeHelper
 import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
 import com.tencent.qqmusic.api.demo.util.QPlayBindHelper
 import com.tencent.qqmusic.api.demo.util.QQMusicApiWrapper
 import com.tencent.qqmusic.third.api.contract.CommonCmd
-import com.tencent.qqmusic.third.api.contract.IQQMusicApi
 import com.tencent.qqmusic.third.api.contract.Keys
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -25,15 +24,11 @@ import org.json.JSONTokener
 class LoginExampleActivity : AppCompatActivity() {
     companion object {
         const val TAG = "LoginExampleActivity"
-        const val BASE_SCHEME = "qqmusicapidemo://"
-        const val URI_LOGIN = BASE_SCHEME + "login"
 
         const val LOGIN_FAILED = 1
     }
 
     private val qPlayBindHelper = QPlayBindHelper(this)
-
-    lateinit var qqMusicApi: IQQMusicApi
     lateinit var qqMusicApiWrapper: QQMusicApiWrapper
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,15 +36,19 @@ class LoginExampleActivity : AppCompatActivity() {
         setContentView(R.layout.activity_login_example)
 
         findViewById<Button>(R.id.bt_bind_service).setOnClickListener {
-            qPlayBindHelper.ensureQQMusicBindByStartProcess {
-                if (it && qPlayBindHelper.isBindQQMusic()) {
-                    Log.d(TAG, "isBindQQMusic")
-                    qqMusicApi = qPlayBindHelper.getQQMusicApi()!!
-                    qqMusicApiWrapper = QQMusicApiWrapper(qqMusicApi)
+            bindQPlayService()
+        }
+    }
 
-                    CommonCmd.loginQQMusic(this, URI_LOGIN)
+    private fun bindQPlayService() {
+        qPlayBindHelper.ensureQQMusicBindByStartProcess {
+            if (it && qPlayBindHelper.isBindQQMusic()) {
+                Log.d(TAG, "isBindQQMusic")
+                val qqMusicApi = qPlayBindHelper.getQQMusicApi()!!
+                qqMusicApiWrapper = QQMusicApiWrapper(qqMusicApi)
 
-                }
+                // 传第二参数package name
+                CommonCmd.loginQQMusic(this, SchemeHelper.URI_LOGIN)
             }
         }
     }
@@ -78,16 +77,17 @@ class LoginExampleActivity : AppCompatActivity() {
 
     private fun handleJumpQQMusicLoginPageReturnBack(intent: Intent?): Boolean {
         val uri = intent?.data ?: return false
-        val qmLogin = uri.getQueryParameter("qmlogin") ?: return false
-        // 跳转qq音乐登录，登录成功后返回：qqmusicapidemo://login?qmlogin=1
-        // qmlogin=0表示失败
-        if (uri.toString().startsWith(URI_LOGIN)) {
-            if (qmLogin == "1") {
+        if (uri.toString().startsWith(SchemeHelper.URI_LOGIN)) {
+//            val qmLogin = uri.getQueryParameter("qmlogin") ?: return false
+//            // 跳转qq音乐登录，登录成功后返回：qqmusicapidemo://login?qmlogin=1
+//            // qmlogin=0表示失败
+//            if (qmLogin == "1") {
+            if (SchemeHelper.isLoginSuccessfully(uri)) {
                 // 下一步是打开qq音乐的授权页，但是如果已经授权过的话是不需要延时的，
                 // 因此这里做一个优化，先尝试requestAuth，失败了再延时打开授权页
                 Log.d(TAG, "[handleJumpQQMusicLoginPageReturnBack] tryQqMusicRequestAuth")
                 tryQqMusicRequestAuth { _, _ ->
-                    qqMusicApiWrapper.verifyCallerIdentity(this, BASE_SCHEME)
+                    QQMusicApiWrapper.verifyCallerIdentity(this)
                 }
             } else {
                 // 如果用户在登录过程中出现错误，其实qq音乐并不会回调错误给我们，只在用户按了返回才会回调0。

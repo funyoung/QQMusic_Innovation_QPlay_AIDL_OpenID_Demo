@@ -2,6 +2,11 @@ package com.tencent.qqmusic.api.demo;
 
 import com.tencent.qqmusic.third.api.contract.CommonCmd;
 
+/**
+ * QQ音乐使用RSA密钥位数为1024位，密钥格式使用PKCS#8格式，因此OPENID_APP_PRIVATE_KEY应该使用
+ * README说明文件中OpenSSL生成的rsa私钥后转换成pkcs#8格式命令生成的文件中保存的私钥串，并去掉首尾
+ * 两行注释内容，以及空格换行符，仅单纯的密钥字符串，形如openid/目录下OpenIDHelper中的Q音公钥串
+ */
 public class Config {
 
     /**
@@ -21,6 +26,6 @@ public class Config {
      * {@link CommonCmd#AIDL_PLATFORM_TYPE_CAR}
      * {@link CommonCmd#AIDL_PLATFORM_TYPE_PAD}
      */
-    public static String BIND_PLATFORM = "";
+    public static String BIND_PLATFORM = CommonCmd.AIDL_PLATFORM_TYPE_PHONE;
 
 }

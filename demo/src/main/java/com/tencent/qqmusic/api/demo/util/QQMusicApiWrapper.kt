@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.DeadObjectException
 import android.util.Log
+import com.tencent.qqmusic.api.common.SchemeHelper
 import com.tencent.qqmusic.api.demo.Config
 import com.tencent.qqmusic.api.demo.LoginExampleActivity.Companion.LOGIN_FAILED
 import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
@@ -17,19 +18,16 @@ class QQMusicApiWrapper(val qqMusicApi: IQQMusicApi) {
 
         private var qqMusicVersion: Int = -1
 
-    }
-
-    fun verifyCallerIdentity(context: Context, callbackUri: String?) {
-        val time = System.currentTimeMillis()
-        val nonce = time.toString()
-        val encryptString = OpenIDHelper.getEncryptString(nonce)
-        CommonCmd.verifyCallerIdentity(
+        fun verifyCallerIdentity(context: Context, callbackUri: String? = SchemeHelper.BASE_SCHEME) {
+            val encryptString = OpenIDHelper.getEncryptString()
+            CommonCmd.verifyCallerIdentity(
                 context,
                 Config.OPENID_APPID,
                 context.packageName,
                 encryptString,
                 callbackUri
-        )
+            )
+        }
     }
 
     /**
@@ -59,9 +57,7 @@ class QQMusicApiWrapper(val qqMusicApi: IQQMusicApi) {
      */
     fun requestAuthNew(success: (String) -> Unit, failed: (Int, String?) -> Unit) {
         Log.i(TAG, "[requestAuth] ")
-        val time = System.currentTimeMillis()
-        val nonce = time.toString()
-        val encryptString = OpenIDHelper.getEncryptString(nonce) //解密&加密
+        val encryptString = OpenIDHelper.getEncryptString() //解密&加密
         val params = Bundle()
         params.putString(Keys.API_RETURN_KEY_ENCRYPT_STRING, encryptString)
 

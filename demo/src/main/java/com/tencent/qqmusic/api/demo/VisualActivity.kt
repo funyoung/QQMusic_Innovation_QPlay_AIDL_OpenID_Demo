@@ -8,8 +8,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Message
-import android.support.v7.app.AppCompatActivity
-import android.support.v7.widget.Toolbar
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import android.util.Log
 import android.view.*
 import android.view.View.GONE
@@ -18,9 +18,12 @@ import android.widget.*
 import android.widget.AdapterView.OnItemClickListener
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.tencent.qqmusic.api.common.IntentHelper
+import com.tencent.qqmusic.api.common.SchemeHelper
 import com.tencent.qqmusic.api.demo.Config.*
 import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
 import com.tencent.qqmusic.api.demo.util.QPlayBindHelper
+import com.tencent.qqmusic.api.demo.util.QQMusicApiWrapper
 import com.tencent.qqmusic.third.api.contract.*
 import com.tencent.qqmusic.third.api.contract.CommonCmd.*
 import org.json.JSONObject
@@ -129,9 +132,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
         backSong?.title = ".. 返回上一级"
 
         //register activeBroadcastReceiver
-        val filter = IntentFilter()
-        filter.addAction("callback_verify_notify")
-        registerReceiver(activeBroadcastReceiver, filter)
+        IntentHelper.registerVerify(this, activeBroadcastReceiver)
 
         val btnActive = findViewById<TextView>(R.id.btnActive)
         btnActive.setOnClickListener { onActiveClick(it) }
@@ -142,8 +143,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
         setSupportActionBar(toolbar)
         toolbar.setOnMenuItemClickListener {
             if (it.itemId == R.id.item_goto_test_api) {
-                val intent = Intent(this@VisualActivity, MainActivity::class.java)
-                startActivity(intent)
+                startMainTestActivity()
             } else if (it.itemId == R.id.item_bind_platform) {
                 val builder = AlertDialog.Builder(this)
                 builder.setItems(
@@ -168,6 +168,11 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
 
             true
         }
+    }
+
+    private fun startMainTestActivity() {
+        val intent = Intent(this, MainActivity::class.java)
+        startActivity(intent)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -252,17 +257,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
 
     private fun verifyCallerRequest() {
         Log.d(TAG, "[verifyCallerRequest]")
-
-        val time = System.currentTimeMillis()
-        val nonce = time.toString()
-        val encryptString = OpenIDHelper.getEncryptString(nonce)
-        verifyCallerIdentity(
-            this,
-            Config.OPENID_APPID,
-            packageName,
-            encryptString,
-            "qqmusicapidemo://xxx"
-        )
+        QQMusicApiWrapper.verifyCallerIdentity(this)
     }
 
     /**
@@ -327,27 +322,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
      * 绑定QQ音乐API服务
      */
     private fun bindQQMusicApiService(platform: String): Boolean {
-        var intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-        // 必须显式绑定
-        when (platform) {
-            AIDL_PLATFORM_TYPE_PHONE -> {
-                intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusic"
-            }
-            AIDL_PLATFORM_TYPE_CAR -> {
-                intent = Intent("com.tencent.qqmusiccar.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusiccar"
-            }
-            AIDL_PLATFORM_TYPE_TV -> {
-                intent = Intent("com.tencent.qqmusictv.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusictv"
-            }
-            else -> {
-                Log.e(TAG, "platform error!", RuntimeException())
-                Toast.makeText(this, "请先在Config中填写配置信息！", Toast.LENGTH_SHORT).show()
-                return false
-            }
-        }
+        val intent = QPlayBindHelper.getQQMusicApiServiceIntent(this, platform)
         return bindService(intent, this, Context.BIND_AUTO_CREATE)
     }
 
@@ -423,8 +398,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
     fun onPlayNext(view: View) {
         Log.d(TAG, "onPlayNext")
 
-        val result = qqmusicApi?.execute("skipToNext", null)
-        val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        val errorCode = ApiSample.skipToNext(qqmusicApi)
         if (errorCode != ErrorCodes.ERROR_OK) {
             Log.d(TAG, "下一首失败($errorCode)")
         }
@@ -436,23 +410,20 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
 
         if (isPlaying()) {
             Log.d(TAG, "pauseMusic")
-            val result = qqmusicApi?.execute("pauseMusic", null)
-            val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+            val errorCode = ApiSample.pauseMusic(qqmusicApi)
             if (errorCode != ErrorCodes.ERROR_OK) {
                 Log.d(TAG, "暂停音乐失败($errorCode)")
             }
         } else {
             if (curPlayState == PlayState.PAUSED || curPlayState == PlayState.PAUSING) {
                 Log.d(TAG, "resumeMusic")
-                val result = qqmusicApi?.execute("resumeMusic", null)
-                val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+                val errorCode = ApiSample.resumeMusic(qqmusicApi)
                 if (errorCode != ErrorCodes.ERROR_OK) {
                     Log.d(TAG, "继续播放音乐失败($errorCode)")
                 }
             } else {
                 Log.d(TAG, "playMusic")
-                val result = qqmusicApi?.execute("playMusic", null)
-                val errorCode = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+                val errorCode = ApiSample.playMusic(qqmusicApi)
                 if (errorCode != ErrorCodes.ERROR_OK) {
                     Log.d(TAG, "开始播放音乐失败($errorCode)")
                 }
@@ -537,7 +508,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
                 return false
             } else if (code == ErrorCodes.ERROR_NEED_USER_AUTHENTICATION) {
                 Log.d(TAG, "commonOpen: CommonCmd.loginQQMusic 请求用户登录")
-                CommonCmd.loginQQMusic(this@VisualActivity, "qqmusicapidemo://xxx")
+                CommonCmd.loginQQMusic(this, SchemeHelper.SAMPLE_SCHEME)
                 return false
             } else if (code == ErrorCodes.ERROR_API_NOT_INITIALIZED) {
                 Log.d(TAG, "commonOpen: ERROR_API_NOT_INITIALIZED")
@@ -972,9 +943,7 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
 
     //AIDL方式请求授权
     private fun startAIDLAuth(finishBlock: ((success: Boolean) -> Unit)) {
-        val time = System.currentTimeMillis()
-        val nonce = time.toString()
-        val encryptString = OpenIDHelper.getEncryptString(nonce) //解密&加密
+        val encryptString = OpenIDHelper.getEncryptString() //解密&加密
 
         val params = Bundle()
         params.putString(Keys.API_RETURN_KEY_ENCRYPT_STRING, encryptString)
@@ -1322,8 +1291,6 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
                 Log.d(TAG, "got play list: $json, error=$error")
             }
         })
-
-        //qqmusicApi?.execute()
     }
 
     fun playSongMid(v: View?) {
@@ -1353,7 +1320,6 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
         //val result = qqmusicApi?.execute("hi", bundle)
         //Log.d(TAG, "sayHi ret:" + result?.getInt(Keys.API_RETURN_KEY_CODE))
 
-        //qqmusicApi?.execute()
         CommonCmd.startQQMusicProcess(this, this.packageName)
     }
 
@@ -1389,15 +1355,11 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
     }
 
     fun sayHi(v: View) {
-        val qPlayBindHelper = QPlayBindHelper(v.context)
-        qPlayBindHelper.ensureQQMusicBindByStartProcess(isStartProcess = false) {
-            if (it) {
-                qqmusicApi = qPlayBindHelper.getQQMusicApi()
-                val bundle = Bundle()
-                bundle.putInt(Keys.API_PARAM_KEY_SDK_VERSION, CommonCmd.SDK_VERSION)
-                bundle.putString(Keys.API_PARAM_KEY_PLATFORM_TYPE, Config.BIND_PLATFORM)
-                val result = qqmusicApi?.execute("hi", bundle)
-                Log.d(TAG, "sayHi ret:" + result?.getInt(Keys.API_RETURN_KEY_CODE))
+        QPlayBindHelper.ensureQQMusicBindByStartProcess(v.context, isStartProcess = false) {
+            if (null != it) {
+                qqmusicApi = it.getQQMusicApi()
+                val code = ApiSample.hi(qqmusicApi, Config.BIND_PLATFORM)
+                Log.d(TAG, "sayHi ret:$code")
             } else {
                 Log.d(TAG, "绑定失败")
             }
@@ -1406,10 +1368,9 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
     }
 
     fun testIsNewUser(v: View) {
-        val qPlayBindHelper = QPlayBindHelper(v.context)
-        qPlayBindHelper.ensureQQMusicBindByStartProcess(isStartProcess = false) {
-            if (it) {
-                qqmusicApi = qPlayBindHelper.getQQMusicApi()
+        QPlayBindHelper.ensureQQMusicBindByStartProcess(v.context, isStartProcess = false) {
+            if (null != it) {
+                qqmusicApi = it.getQQMusicApi()
                 val params = Bundle()
                 val result = qqmusicApi?.execute("isNewUser", params)
                 val error = result?.getString(Keys.API_RETURN_KEY_ERROR)
@@ -1455,12 +1416,9 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
     }
 
     fun requestAuth(v: View) {
-        val qPlayBindHelper = QPlayBindHelper(v.context)
-        qPlayBindHelper.ensureQQMusicBindByStartProcess {
-            if (it) {
-                qqmusicApi = qPlayBindHelper.getQQMusicApi()
-                verifyCallerRequest()
-            }
+        QPlayBindHelper.ensureQQMusicBindByStartProcess(v.context) {
+            qqmusicApi = it.getQQMusicApi()
+            verifyCallerRequest()
         }
     }
 

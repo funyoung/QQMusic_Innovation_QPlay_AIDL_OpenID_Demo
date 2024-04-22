@@ -16,6 +16,40 @@ import com.tencent.qqmusic.third.api.contract.IQQMusicApi
 class QPlayBindHelper(private val context: Context, private val bindPlatform: String = AIDL_PLATFORM_TYPE_PHONE) {
     companion object {
         private const val TAG = "QQMusicBindHelper"
+        fun ensureQQMusicBindByStartProcess(context: Context, isStartProcess: Boolean = true, callback: ((QPlayBindHelper) -> Unit)? = null) {
+            QPlayBindHelper(context).run {
+                ensureQQMusicBindByStartProcess(isStartProcess) {
+                    if (it) {
+                        callback?.invoke(this)
+                    }
+                }
+            }
+        }
+
+        fun getQQMusicApiServiceIntent(context: Context, bindPlatform: String): Intent {
+            var intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
+            // 必须显式绑定
+            when (bindPlatform) {
+                AIDL_PLATFORM_TYPE_PHONE -> {
+                    intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
+                    intent.`package` = "com.tencent.qqmusic"
+                }
+                CommonCmd.AIDL_PLATFORM_TYPE_CAR -> {
+                    intent = Intent("com.tencent.qqmusiccar.third.api.QQMusicApiService")
+                    intent.`package` = "com.tencent.qqmusiccar"
+                }
+                CommonCmd.AIDL_PLATFORM_TYPE_TV -> {
+                    intent = Intent("com.tencent.qqmusictv.third.api.QQMusicApiService")
+                    intent.`package` = "com.tencent.qqmusictv"
+                }
+                else -> {
+                    Log.e(TAG, "platform 不匹配")
+                    Toast.makeText(context, "请先在Config中填写配置信息！", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return intent
+        }
+
     }
 
     private var api: IQQMusicApi? = null
@@ -61,7 +95,7 @@ class QPlayBindHelper(private val context: Context, private val bindPlatform: St
             callback?.invoke(true)
         }
         // 必须显式绑定
-        val intent = getQQMusicApiServiceIntent()
+        val intent = getQQMusicApiServiceIntent(context, bindPlatform)
 
         val ret = try {
             Log.d(TAG, "[bindQQMusic] bindService retry:$retry")
@@ -123,30 +157,6 @@ class QPlayBindHelper(private val context: Context, private val bindPlatform: St
 
     fun getQQMusicApi() = api
 
-    private fun getQQMusicApiServiceIntent(): Intent {
-        var intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-        // 必须显式绑定
-        when (bindPlatform) {
-            CommonCmd.AIDL_PLATFORM_TYPE_PHONE -> {
-                intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusic"
-            }
-            CommonCmd.AIDL_PLATFORM_TYPE_CAR -> {
-                intent = Intent("com.tencent.qqmusiccar.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusiccar"
-            }
-            CommonCmd.AIDL_PLATFORM_TYPE_TV -> {
-                intent = Intent("com.tencent.qqmusictv.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusictv"
-            }
-            else -> {
-                Log.e(TAG, "platform 不匹配")
-                Toast.makeText(context, "请先在Config中填写配置信息！", Toast.LENGTH_SHORT).show()
-            }
-        }
-        return intent
-    }
-
     /**
      * 重新绑定qq音乐
      */
@@ -165,7 +175,6 @@ class QPlayBindHelper(private val context: Context, private val bindPlatform: St
         }, 200)
         reBinding = true
     }
-
 }
 
 fun Context.unbindServiceSafe(conn: ServiceConnection) {

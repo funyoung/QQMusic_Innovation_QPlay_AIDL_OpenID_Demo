@@ -2,17 +2,20 @@ package com.tencent.qqmusic.api.demo.openid;
 
 import android.util.Base64;
 
+import com.tencent.qqmusic.api.common.SchemeHelper;
 import com.tencent.qqmusic.api.demo.Config;
-import com.tencent.qqmusic.third.api.contract.Keys;
-
-import org.json.JSONObject;
 
 public class OpenIDHelper {
 
     private static final String QQMusicPublicKey = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCrp4sMcJjY9hb2J3sHWlwIEBrJlw2Cimv+rZAQmR8V3EI+0PUK14pL8OcG7CY79li30IHwYGWwUapADKA01nKgNeq7+rSciMYZv6ByVq+ocxKY8az78HwIppwxKWpQ+ziqYavvfE5+iHIzAc8RvGj9lL6xx1zhoPkdaA0agAyuMQIDAQAB";
 
 
-    public static String getEncryptString(String nonce) {
+    public static String getEncryptString() {
+        final String nonce = String.valueOf(System.currentTimeMillis());
+        return getEncryptNonce(nonce);
+    }
+
+    public static String getEncryptNonce(String nonce) {
         if (nonce == null || nonce.isEmpty()) {
             return null;
         }
@@ -21,14 +24,10 @@ public class OpenIDHelper {
             //1.使用App私钥签名
             String signString = RSAUtils.sign(nonce.getBytes(), Config.OPENID_APP_PRIVATE_KEY);
 
-            JSONObject signJson = new JSONObject();
-            signJson.put(Keys.API_RETURN_KEY_NONCE, nonce);
-            signJson.put(Keys.API_RETURN_KEY_SIGN, signString);
-            signJson.put(Keys.API_RETURN_KEY_CALLBACK_URL, "qqmusicapidemo://");
-            String sourceString = signJson.toString();
+            final byte[] sourceBytes = SchemeHelper.buildSourceBytes(signString, nonce);
 
             //2. 使用Q音公钥加密(随机数+签名)
-            byte[] encryptData = RSAUtils.encryptByPublicKey(sourceString.getBytes(), QQMusicPublicKey);
+            byte[] encryptData = RSAUtils.encryptByPublicKey(sourceBytes, QQMusicPublicKey);
             if (encryptData == null) {
                 return null;
             }

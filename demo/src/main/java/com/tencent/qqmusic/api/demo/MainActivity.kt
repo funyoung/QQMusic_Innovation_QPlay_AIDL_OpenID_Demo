@@ -7,12 +7,14 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
-import android.support.v7.app.AppCompatActivity
-import android.support.v7.widget.Toolbar
 import android.util.Log
 import android.view.View
 import android.widget.*
-import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import com.tencent.qqmusic.api.common.SchemeHelper
+import com.tencent.qqmusic.api.demo.util.QPlayBindHelper
+import com.tencent.qqmusic.api.demo.util.QQMusicApiWrapper
 import com.tencent.qqmusic.third.api.contract.*
 import kotlinx.android.synthetic.main.activity_main.*
 
@@ -67,10 +69,13 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
     override fun onServiceConnected(p0: ComponentName, p1: IBinder) {
         // 绑定成功
         qqmusicApi = IQQMusicApi.Stub.asInterface(p1)
+
         // 可选：注册事件回调
-        qqmusicApi?.registerEventListener(arrayListOf(Events.API_EVENT_PLAY_SONG_CHANGED), eventListener)
-        qqmusicApi?.registerEventListener(arrayListOf(Events.API_EVENT_PLAY_STATE_CHANGED), eventListener)
-        qqmusicApi?.registerEventListener(arrayListOf(Events.API_EVENT_PLAY_LIST_CHANGED), eventListener)
+        qqmusicApi?.run {
+            registerEventListener(arrayListOf(Events.API_EVENT_PLAY_SONG_CHANGED), eventListener)
+            registerEventListener(arrayListOf(Events.API_EVENT_PLAY_STATE_CHANGED), eventListener)
+            registerEventListener(arrayListOf(Events.API_EVENT_PLAY_LIST_CHANGED), eventListener)
+        }
 
         arrayOf(executeButton, executeAsyncButton).forEach { it.isEnabled = true }
         connectStateTextView.text = "连接状态: connected"
@@ -205,6 +210,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
         bt_register.setOnClickListener {
             qqmusicApi?.registerEventListener(arrayListOf(Events.API_EVENT_SONG_FAVORITE_STATE_CHANGED), eventListener)
         }
+
         bt_unregister.setOnClickListener {
             qqmusicApi?.unregisterEventListener(arrayListOf(Events.API_EVENT_SONG_FAVORITE_STATE_CHANGED), eventListener)
         }
@@ -242,14 +248,11 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
             if (code == ErrorCodes.ERROR_API_NO_PERMISSION) {
                 Log.d(TAG, "commonOpen: CommonCmd.verifyCallerIdentity")
 
-                val time = System.currentTimeMillis()
-                val nonce = time.toString()
-                val encryptString = OpenIDHelper.getEncryptString(nonce)
-                CommonCmd.verifyCallerIdentity(this, Config.OPENID_APPID, packageName, encryptString, "qqmusicapidemo://xxx")
+                QQMusicApiWrapper.verifyCallerIdentity(this)
             } else if (code == ErrorCodes.ERROR_NEED_USER_AUTHENTICATION) {
                 Log.d(TAG, "commonOpen: CommonCmd.loginQQMusic")
-                //qqmusic://qq.com/other/aidl?p={"cmd":"login","callbackurl": "qqmusicapidemo://xxx"}
-                CommonCmd.loginQQMusic(this@MainActivity, "qqmusicapidemo://xxx")
+                //qqmusic://qq.com/other/aidl?p={"cmd":"login","callbackurl": SchemaHelper.SAMPLE_SCHEME}
+                CommonCmd.loginQQMusic(this, SchemeHelper.SAMPLE_SCHEME)
             }
         }
     }
@@ -258,22 +261,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
      * 绑定QQ音乐API服务
      */
     private fun bindQQMusicApiService(platform:String): Boolean {
-        var intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-        // 必须显式绑定
-        when(platform){
-            CommonCmd.AIDL_PLATFORM_TYPE_PHONE -> {
-                intent = Intent("com.tencent.qqmusic.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusic"}
-            CommonCmd.AIDL_PLATFORM_TYPE_CAR -> {
-                intent = Intent("com.tencent.qqmusiccar.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusiccar"}
-            CommonCmd.AIDL_PLATFORM_TYPE_TV -> {
-                intent = Intent("com.tencent.qqmusictv.third.api.QQMusicApiService")
-                intent.`package` = "com.tencent.qqmusictv"}
-            else -> {
-                Log.e(TAG,"platform error!",RuntimeException())
-            }
-        }
+        val intent = QPlayBindHelper.getQQMusicApiServiceIntent(this, platform)
         return bindService(intent, this, Context.BIND_AUTO_CREATE)
     }
 
@@ -281,8 +269,10 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
         super.onDestroy()
 
         try {
-            qqmusicApi?.unregisterEventListener(arrayListOf(Events.API_EVENT_PLAY_SONG_CHANGED), eventListener)
-            qqmusicApi?.unregisterEventListener(arrayListOf(Events.API_EVENT_PLAY_LIST_CHANGED), eventListener)
+            qqmusicApi?.run {
+                unregisterEventListener(arrayListOf(Events.API_EVENT_PLAY_SONG_CHANGED), eventListener)
+                unregisterEventListener(arrayListOf(Events.API_EVENT_PLAY_LIST_CHANGED), eventListener)
+            }
         } catch (ignored: Throwable) {
         }
         unbindService(this)

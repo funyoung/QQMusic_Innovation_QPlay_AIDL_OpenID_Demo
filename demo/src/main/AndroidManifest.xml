@@ -11,10 +11,9 @@
         android:testOnly="false"
         android:theme="@style/AppTheme">
 
-        <activity android:name=".ExampleListActivity">
+        <activity android:name=".ExampleListActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -31,6 +30,7 @@
 
         <activity
             android:name=".CallbackActivity"
+            android:exported="true"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
             android:screenOrientation="portrait"
             android:theme="@style/AppTheme.NoActionBar">
@@ -56,14 +56,12 @@
             android:name=".LoginExampleActivity"
             android:screenOrientation="portrait"
             android:theme="@style/AppTheme.NoActionBar">
-            <!--            <intent-filter>-->
-            <!--                <action android:name="android.intent.action.VIEW" />-->
-
-            <!--                <category android:name="android.intent.category.DEFAULT" />-->
-            <!--                <category android:name="android.intent.category.BROWSABLE" />-->
-
-            <!--                <data android:scheme="qqmusicapidemo" />-->
-            <!--            </intent-filter>-->
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.VIEW" />-->
+<!--                <category android:name="android.intent.category.DEFAULT" />-->
+<!--                <category android:name="android.intent.category.BROWSABLE" />-->
+<!--                <data android:scheme="qqmusicapidemo" />-->
+<!--            </intent-filter>-->
         </activity>
     </application>
 

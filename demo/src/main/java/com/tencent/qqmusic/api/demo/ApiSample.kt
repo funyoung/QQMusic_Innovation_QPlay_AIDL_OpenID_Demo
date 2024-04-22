@@ -1,7 +1,7 @@
 package com.tencent.qqmusic.api.demo
 
 import android.os.Bundle
-import android.support.annotation.Nullable
+import androidx.annotation.Nullable
 import android.util.Log
 import com.google.gson.Gson
 import com.tencent.qqmusic.third.api.contract.*
@@ -38,12 +38,14 @@ object ApiSample {
         return bundle?.getString(Keys.API_RETURN_KEY_ERROR)
     }
 
-    fun hi(api: IQQMusicApi?) {
+    fun hi(api: IQQMusicApi?, platform: String = CommonCmd.AIDL_PLATFORM_TYPE_PHONE, version: Int = CommonCmd.SDK_VERSION): Int {
         val bundle = Bundle()
-        bundle.putInt(Keys.API_PARAM_KEY_SDK_VERSION, CommonCmd.SDK_VERSION)
-        bundle.putString(Keys.API_PARAM_KEY_PLATFORM_TYPE, CommonCmd.AIDL_PLATFORM_TYPE_PHONE)
+        bundle.putInt(Keys.API_PARAM_KEY_SDK_VERSION, version)
+        bundle.putString(Keys.API_PARAM_KEY_PLATFORM_TYPE, platform)
         val result = api?.execute("hi", bundle)
-        Log.i(TAG, "sayHi ret:" + result!!.getInt(Keys.API_RETURN_KEY_CODE))
+        val code = result?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        Log.i(TAG, "sayHi ret: $code")
+        return code
     }
 
     fun playSongMid(api: IQQMusicApi?, ids: ArrayList<String>, block: (() -> Unit)) {
@@ -85,37 +87,41 @@ object ApiSample {
 
     fun playMusic(api: IQQMusicApi?): Int {
         val ret = api?.execute("playMusic", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
+    }
+
+    private fun parseResultCode(ret: Bundle?, def: Int): Int {
+        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: def
     }
 
     fun stopMusic(api: IQQMusicApi?): Int {
         val ret = api?.execute("stopMusic", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     fun pauseMusic(api: IQQMusicApi?): Int {
         val ret = api?.execute("pauseMusic", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     fun resumeMusic(api: IQQMusicApi?): Int {
         val ret = api?.execute("resumeMusic", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     fun skipToNext(api: IQQMusicApi?): Int {
         val ret = api?.execute("skipToNext", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     fun skipToPrevious(api: IQQMusicApi?): Int {
         val ret = api?.execute("skipToPrevious", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     fun getPlaybackState(api: IQQMusicApi?): Int {
         val ret = api?.execute("getPlaybackState", null)
-        return ret?.getInt(Keys.API_RETURN_KEY_CODE) ?: 0
+        return parseResultCode(ret, 0)
     }
 
     @Nullable
@@ -337,7 +343,7 @@ object ApiSample {
         }
         api?.executeAsync("voiceShortcut", bundle, object : IQQMusicApiCallback.Stub() {
             override fun onReturn(p0: Bundle?) {
-                val code = p0?.getInt(Keys.API_RETURN_KEY_CODE) ?: ERROR_API_NOT_INITIALIZED
+                val code = parseResultCode(p0, ERROR_API_NOT_INITIALIZED)
                 block(code)
             }
         })
@@ -351,11 +357,13 @@ object ApiSample {
         }
         api?.executeAsync("voicePlay", bundle, object : IQQMusicApiCallback.Stub() {
             override fun onReturn(p0: Bundle?) {
-                val code = p0?.getInt(Keys.API_RETURN_KEY_CODE) ?: ERROR_API_NOT_INITIALIZED
+                val code = parseResultCode(p0, ERROR_API_NOT_INITIALIZED)
                 val json = p0?.getString(Keys.API_RETURN_KEY_DATA)
                 block(code, json)
             }
         })
     }
+
+
 
 }

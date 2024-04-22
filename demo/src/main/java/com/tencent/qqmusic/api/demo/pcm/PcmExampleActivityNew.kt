@@ -3,7 +3,7 @@ package com.tencent.qqmusic.api.demo.pcm
 import android.content.*
 import android.os.Bundle
 import android.os.IBinder
-import android.support.v7.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatActivity
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
