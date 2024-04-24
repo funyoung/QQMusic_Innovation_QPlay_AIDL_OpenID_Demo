@@ -1,31 +1,56 @@
 package com.tencent.qqmusic.api.demo
 
 import android.app.AlertDialog
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Message
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import android.util.Log
-import android.view.*
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
-import android.widget.*
+import android.view.ViewGroup
 import android.widget.AdapterView.OnItemClickListener
+import android.widget.BaseAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.ListView
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.tencent.qqmusic.api.common.IntentHelper
 import com.tencent.qqmusic.api.common.SchemeHelper
-import com.tencent.qqmusic.api.demo.Config.*
+import com.tencent.qqmusic.api.demo.Config.BIND_PLATFORM
 import com.tencent.qqmusic.api.demo.openid.OpenIDHelper
 import com.tencent.qqmusic.api.demo.util.QPlayBindHelper
 import com.tencent.qqmusic.api.demo.util.QQMusicApiWrapper
-import com.tencent.qqmusic.third.api.contract.*
-import com.tencent.qqmusic.third.api.contract.CommonCmd.*
+import com.tencent.qqmusic.third.api.contract.CommonCmd
+import com.tencent.qqmusic.third.api.contract.CommonCmd.AIDL_PLATFORM_TYPE_PHONE
+import com.tencent.qqmusic.third.api.contract.CommonCmd.AIDL_PLATFORM_TYPE_TV
+import com.tencent.qqmusic.third.api.contract.CommonCmd.action
+import com.tencent.qqmusic.third.api.contract.CommonCmd.init
+import com.tencent.qqmusic.third.api.contract.Data
+import com.tencent.qqmusic.third.api.contract.ErrorCodes
+import com.tencent.qqmusic.third.api.contract.Events
+import com.tencent.qqmusic.third.api.contract.IQQMusicApi
+import com.tencent.qqmusic.third.api.contract.IQQMusicApiCallback
+import com.tencent.qqmusic.third.api.contract.IQQMusicApiEventListener
+import com.tencent.qqmusic.third.api.contract.Keys
+import com.tencent.qqmusic.third.api.contract.PlayState
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.BufferedReader
@@ -34,8 +59,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
-import java.util.*
-import kotlin.collections.ArrayList
+import java.util.Stack
+import java.util.Timer
+import java.util.TimerTask
 import kotlin.concurrent.thread
 
 /*
@@ -1137,60 +1163,85 @@ class VisualActivity : AppCompatActivity(), ServiceConnection {
         builder.create().show()
     }
 
+    /**
+     * 搜索QQ音乐，关键字字符串 + 搜索类型(album和folder都返回FolderInfo, 歌词，混合,mv,歌手,用户返回通用json串，歌曲或相似歌曲返回歌曲列表)
+     */
     private fun search(keyword: String, type: Int) {
+        val params = createSearchParameters(keyword, type)
+        qqmusicApi?.executeAsync("search", params, object : IQQMusicApiCallback.Stub() {
+            override fun onReturn(result: Bundle) {
+                handleSearchResult(result, type)
+            }
+        })
+    }
+
+    private fun createSearchParameters(keyword: String, type: Int): Bundle {
         val params = Bundle()
         params.putInt("searchType", type)
         params.putString("keyword", keyword)
-        qqmusicApi?.executeAsync("search", params, object : IQQMusicApiCallback.Stub() {
-            override fun onReturn(result: Bundle) {
-                // 回调的结果
-                commonOpen(result)
-                val code = result.getInt(Keys.API_RETURN_KEY_CODE)
-                if (code == ErrorCodes.ERROR_OK) {
-                    val dataJson = result.getString(Keys.API_RETURN_KEY_DATA)
-                    val array = JsonParser().parse(dataJson).asJsonArray
-                    when (type) {
-                        Data.SearchType.SEARCH_TYPE_ALBUM, Data.SearchType.SEARCH_TYPE_FOLDER -> {
-                            curFolderlist.clear()
-                            backFolder?.let { curFolderlist.add(it) }
-                            for (elem in array) {
-                                val folder = gson.fromJson(elem, Data.FolderInfo::class.java)
-                                curFolderlist.add(folder)
-                            }
-                            printToTextView("获取列表成功（${curFolderlist.size})")
-                            runOnUiThread {
-                                songListView.visibility = GONE
-                                folderListView.visibility = VISIBLE
-                                folderAdapter?.notifyDataSetChanged()
-                            }
-                        }
-                        Data.SearchType.SEARCH_TYPE_LYRIC, Data.SearchType.SEARCH_TYPE_MIX, Data.SearchType.SEARCH_TYPE_MV, Data.SearchType.SEARCH_TYPE_SINGER, Data.SearchType.SEARCH_TYPE_USER -> {
-                            runOnUiThread {
-                                AlertDialog.Builder(this@VisualActivity)
-                                    .setMessage(dataJson)
-                                    .show()
-                            }
-                        }
-                        Data.SearchType.SEARCH_TYPE_SIMILAR_SONG, Data.SearchType.SEARCH_TYPE_SONG -> {
-                            curSonglist.clear()
-                            backSong?.let { curSonglist.add(it) }
-                            for (elem in array) {
-                                val song = gson.fromJson(elem, Data.Song::class.java)
-                                curSonglist.add(song)
-                            }
-                            printToTextView("获取歌曲列表成功（${curSonglist.size})")
-                            runOnUiThread {
-                                songListView.visibility = VISIBLE
-                                folderListView.visibility = GONE
-                                songAdapter?.notifyDataSetChanged()
-                            }
-                        }
-                    }
-                } else {
-                    printToTextView("搜索失败（$code)")
-                }
+        return params
+    }
+
+    private fun handleSearchResult(result: Bundle, type: Int) {
+        val code = result.getInt(Keys.API_RETURN_KEY_CODE)
+        var success = false
+        if (code == ErrorCodes.ERROR_OK) {
+            val dataJson = result.getString(Keys.API_RETURN_KEY_DATA)
+            dataJson?.let {
+                handleSearchResult(it, type)
+                success = true
             }
-        })
+        }
+
+        if (!success) {
+            printToTextView("搜索失败（$code)")
+        }
+    }
+    private fun handleSearchResult(dataJson: String, type: Int) {
+        when (type) {
+            Data.SearchType.SEARCH_TYPE_ALBUM, Data.SearchType.SEARCH_TYPE_FOLDER -> handleFolderSearchResult(dataJson)
+            Data.SearchType.SEARCH_TYPE_LYRIC, Data.SearchType.SEARCH_TYPE_MIX, Data.SearchType.SEARCH_TYPE_MV, Data.SearchType.SEARCH_TYPE_SINGER, Data.SearchType.SEARCH_TYPE_USER -> handleGenericSearchResult(dataJson)
+            Data.SearchType.SEARCH_TYPE_SIMILAR_SONG, Data.SearchType.SEARCH_TYPE_SONG -> handleSongSearchResult(dataJson)
+        }
+    }
+    private fun handleFolderSearchResult(dataJson: String) {
+        val array = JsonParser().parse(dataJson).asJsonArray
+        curFolderlist.clear()
+        backFolder?.let { curFolderlist.add(it) }
+        for (elem in array) {
+            val folder = gson.fromJson(elem, Data.FolderInfo::class.java)
+            curFolderlist.add(folder)
+        }
+        printToTextView("获取列表成功（${curFolderlist.size})")
+        runOnUiThread {
+            songListView.visibility = GONE
+            folderListView.visibility = VISIBLE
+            folderAdapter?.notifyDataSetChanged()
+        }
+    }
+
+    private fun handleGenericSearchResult(dataJson: String) {
+        runOnUiThread {
+            AlertDialog.Builder(this@VisualActivity)
+                .setMessage(dataJson)
+                .show()
+        }
+    }
+
+    private fun handleSongSearchResult(dataJson: String) {
+        val array = JsonParser().parse(dataJson).asJsonArray
+        curSonglist.clear()
+        backSong?.let { curSonglist.add(it) }
+        for (elem in array) {
+            val song = gson.fromJson(elem, Data.Song::class.java)
+            curSonglist.add(song)
+        }
+        printToTextView("获取歌曲列表成功（${curSonglist.size})")
+        runOnUiThread {
+            songListView.visibility = VISIBLE
+            folderListView.visibility = GONE
+            songAdapter?.notifyDataSetChanged()
+        }
     }
 
     fun onClickLyric(view: View) {
